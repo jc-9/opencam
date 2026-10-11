@@ -97,18 +97,13 @@ Or directly:
 ./venv/bin/python app.py
 ```
 
-## Install to app menu (Omarchy / Hyprland)
+## App menu (Omarchy / Hyprland)
 
-Ships with its own icon (`opencam.svg`: camera glyph + "open" wordmark in
-Omarchy theme colors). Search "opencam" in the app launcher (Walker) after:
-
-```bash
-mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/scalable/apps
-cp opencam.desktop ~/.local/share/applications/
-cp opencam.svg ~/.local/share/icons/hicolor/scalable/apps/
-update-desktop-database ~/.local/share/applications
-gtk-update-icon-cache ~/.local/share/icons/hicolor
-```
+`./install.sh` handles the launcher entry (with its own icon, `opencam.svg`:
+camera glyph + "open" wordmark in Omarchy theme colors) — search **opencam**
+in the app launcher (Walker) after installing. To re-do it manually, re-run
+`./install.sh` (idempotent); don't copy `opencam.desktop.template` by hand,
+it contains an `@INSTALL_DIR@` placeholder the installer fills in.
 
 ## Stack
 
@@ -120,9 +115,10 @@ gtk-update-icon-cache ~/.local/share/icons/hicolor
 
 ## Verification
 
+- Live-verified on V4L2 hardware: streaming + FPS, full filter stack, rotate 90° size transpose, camera switch restart, stop → still-frame editing, launcher relaunch
+- Fresh-clone install simulation: venv fallback route, generated desktop entry (`desktop-file-validate` clean), icon install, app boot
+- Multi-filter pipeline: add/select/reorder/remove stages; numbered list + on-screen pipeline label; sequential worker chain; param restore on reselect (60+ check offscreen suite, includes prior-crash repro scenario)
 - Camera enumeration + path
 - Theme colors loaded from active Omarchy theme
-- Live capture + filter switching (binary with interactive hist, sobel)
-- Multi-filter pipeline: add/select/reorder/remove stages; numbered list + on-screen pipeline label; sequential worker chain; param restore on reselect (18-check offscreen test, includes prior-crash repro scenario)
 - Sidebar + clean layout, no overlaps
 - CIFS safe
