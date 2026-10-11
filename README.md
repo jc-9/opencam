@@ -32,22 +32,32 @@ C-mount lens setup on Penny — the same frame through different pipeline stages
 - Python 3.10+
 - PyQt6, OpenCV, NumPy (see `requirements.txt`)
 
-## Install from source
+## Quick start (Omarchy / any Linux)
 
 ```bash
 git clone https://github.com/jc-9/opencam.git
 cd opencam
-python3 -m venv venv
+./install.sh
+```
+
+`install.sh` picks the best dependency route for your machine (native system
+packages when present, otherwise a venv with `--system-site-packages`), installs
+the desktop entry + icon into `~/.local`, and prints a confirmation. Then search
+**opencam** in your app launcher. No sudo needed.
+
+Camera note: your user must be able to read `/dev/video*` (on most distros
+that means membership in the `video` group; check with `groups | grep -o video`).
+
+A C++ port (optional/experimental; needs Qt6 dev headers) lives in `cpp/` —
+see `cpp/README.md` to build it with `./cpp/build.sh`.
+
+### Manual install (no install.sh)
+
+```bash
+python3 -m venv --system-site-packages venv
 ./venv/bin/pip install -r requirements.txt
 ./run.sh
 ```
-
-A C++ port (Qt6 + OpenCV, same features, leaner memory) lives in `cpp/` —
-see `cpp/README.md` to build it with `./cpp/build.sh`.
-
-(`run.sh` uses `./venv/bin/python app.py` with a single-instance guard; if your
-distro ships PyQt6 system-wide you can create the venv with `--system-site-packages`
-instead.)
 
 ## Controls (all inside the single window)
 
