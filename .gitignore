@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Qt / crash artifacts
+*.core
+core.*
+crash-*.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.vscode/
+.idea/
+
+# Local run state
+/tmp/
+*.lock

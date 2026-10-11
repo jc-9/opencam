@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=opencam
+GenericName=USB Webcam C-Mount Setup
+Comment=Live preview + filters (threshold histogram, Sobel X) for setting up USB webcams with manual C-mount lenses
+Exec=/home/justin/Projects/COMPUTER_VISION/opencam_101126/run.sh
+Icon=camera-web
+Terminal=false
+Categories=AudioVideo;Video;Settings;
+Keywords=camera;webcam;setup;c-mount;focus;threshold;opencv;
+StartupNotify=false
