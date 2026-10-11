@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- background -->
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="#1a1b26" stroke="#414868" stroke-width="2"/>
+  <!-- viewfinder bump -->
+  <rect x="18" y="17.5" width="12" height="7" rx="2" fill="#24283b" stroke="#7aa2f7" stroke-width="2"/>
+  <!-- camera body -->
+  <rect x="11" y="24" width="42" height="22" rx="5" fill="#24283b" stroke="#7aa2f7" stroke-width="2.5"/>
+  <!-- flash dot -->
+  <circle cx="47" cy="30" r="2" fill="#f7768e"/>
+  <!-- lens -->
+  <circle cx="32" cy="35" r="8.5" fill="#1a1b26" stroke="#7aa2f7" stroke-width="2.5"/>
+  <circle cx="32" cy="35" r="3.5" fill="#7aa2f7"/>
+  <!-- wordmark -->
+  <text x="32" y="57.5" font-family="monospace" font-size="10.5" fill="#7aa2f7" text-anchor="middle" letter-spacing="1">open</text>
+</svg>

@@ -6,6 +6,26 @@ Live preview of the camera feed with a stackable, numbered filter pipeline to he
 
 Stopping the stream freezes the last frame — filters stay fully editable on the still image (add, reorder, remove, tune params), so you can keep working without the camera running.
 
+## Screenshots
+
+C-mount lens setup on Penny — the same frame through different pipeline stages:
+
+**Raw base (No Filter)**
+
+![opencam raw base view](screenshots/opencam_penny_raw.png)
+
+**Canny stage**
+
+![opencam canny filter](screenshots/opencam_penny_canny_filter.png)
+
+**Morphological stage**
+
+![opencam morphological filter](screenshots/opencam_penny_morph.png)
+
+**App view**
+
+![opencam app view](screenshots/opencam_penny.png)
+
 ## Requirements
 
 - Linux with V4L2 cameras (`/dev/video*`; `v4l2-ctl` from `v4l-utils` recommended for USB camera names)
@@ -22,6 +42,9 @@ python3 -m venv venv
 ./run.sh
 ```
 
+A C++ port (Qt6 + OpenCV, same features, leaner memory) lives in `cpp/` —
+see `cpp/README.md` to build it with `./cpp/build.sh`.
+
 (`run.sh` uses `./venv/bin/python app.py` with a single-instance guard; if your
 distro ships PyQt6 system-wide you can create the venv with `--system-site-packages`
 instead.)
@@ -33,8 +56,8 @@ Menus live in a left sidebar (vertical stack, ready for more dropdowns):
 - **▶ START STREAM / ⏹ STOP STREAM** — toggle (full-width in sidebar)
 - **Camera** dropdown — auto-detected V4L2 (USB first). Shows **Path: /dev/videoX** explicitly below it. Robust autodetection via v4l2-ctl + fallback.
 - **Add Filter** dropdown + **Add** button — appends a filter to the pipeline
-- **Applied Filters** numbered list — "1. Gaussian Smoothing", "2. Binary Threshold", ... Select an entry to edit it in the right panel; **✕ / ↑ / ↓** buttons remove / reorder it.
-- **Numbered pipeline label** above the preview — "1:Gaussian → [2:Binary] → 3:Sobel" shows the applied order on screen; brackets mark the viewed stage.
+- **Applied Filters** list — unnumbered `No Filter — raw base` pinned at the top (the raw frame every stack starts from; not a choice, can't be moved or removed), then numbered filters: "1. Gaussian Smoothing", "2. Binary Threshold", ... Select an entry to edit it in the right panel; **✕ / ↑ / ↓** buttons remove / reorder it (nothing can move above the raw base).
+- **Numbered pipeline label** above the preview — "Raw → 1:Gaussian → [2:Binary] → 3:Sobel" shows the applied order on screen; brackets mark the viewed stage.
 - Clicking a stage previews the **cumulative result up to that stage**: click 3 → effects of 1→2→3, click 2 → 1→2, click 1 → only 1. Works live and on the frozen still frame.
 - Filters apply sequentially (each stage's output feeds the next). The histogram shows the input of the selected binary stage.
 - Dynamic right panel (follows same layout convention; restores saved params when you reselect a stage):
@@ -47,6 +70,8 @@ Menus live in a left sidebar (vertical stack, ready for more dropdowns):
   - Median Blur: kernel_size (odd 3-15)
   - Bilateral Filter: d, sigma_color, sigma_space
   - Color Threshold: color_space (HSV/LAB/YCrCb), lower/upper per channel, invert
+  - Rotate Image: angle in degrees (counter-clockwise; exact 90°/270° steps transpose the canvas, other angles keep it)
+- **Size readout** under the pipeline label — current image size as height × width (e.g. `720 × 1280`), updating for every viewed stage since filters like Rotate can change it
 
 Fully compatible with current Omarchy theme (loads colors.toml at runtime, applies to palette + QSS). Switch themes then restart app to pick up new colors.
 
@@ -64,13 +89,16 @@ Or directly:
 
 ## Install to app menu (Omarchy / Hyprland)
 
-```bash
-mkdir -p ~/.local/share/applications
-cp opencam.desktop ~/.local/share/applications/
-update-desktop-database ~/.local/share/applications
-```
+Ships with its own icon (`opencam.svg`: camera glyph + "open" wordmark in
+Omarchy theme colors). Search "opencam" in the app launcher (Walker) after:
 
-(Icon uses the standard "camera-web" — works in most icon themes.)
+```bash
+mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/scalable/apps
+cp opencam.desktop ~/.local/share/applications/
+cp opencam.svg ~/.local/share/icons/hicolor/scalable/apps/
+update-desktop-database ~/.local/share/applications
+gtk-update-icon-cache ~/.local/share/icons/hicolor
+```
 
 ## Stack
 

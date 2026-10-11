@@ -103,6 +103,7 @@ FILTERS = [
     ("Median Blur", "median"),
     ("Bilateral Filter", "bilateral"),
     ("Color Threshold", "color_threshold"),
+    ("Rotate Image", "rotate"),
 ]
 
 KERNEL_SIZES = [3, 5, 7]
@@ -311,6 +312,21 @@ class CameraWorker(QObject):
             if p.get("invert", False):
                 mask = 255 - mask
             return cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+
+        if filt == "rotate":
+            angle = float(p.get("angle", 0))
+            norm = angle % 360
+            if norm == 0:
+                return frame  # neutral: zero-cost passthrough (never mutated downstream)
+            if norm == 180:
+                return cv2.rotate(frame, cv2.ROTATE_180)
+            if norm == 90:
+                return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            if norm == 270:
+                return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+            h, w = frame.shape[:2]
+            M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+            return cv2.warpAffine(frame, M, (w, h))
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -549,6 +565,8 @@ class FilterPanel(QWidget):
             self._build_bilateral(p)
         elif key == "color_threshold":
             self._build_color_threshold(p)
+        elif key == "rotate":
+            self._build_rotate(p)
         else:
             self._build_none()
         # Newly built children don't reliably trigger a layout pass inside the
@@ -601,6 +619,8 @@ class FilterPanel(QWidget):
                 "upper_v": self.upper_v_spin.value() if hasattr(self, "upper_v_spin") else 255,
                 "invert": self.invert_cb.isChecked() if hasattr(self, "invert_cb") else False
             }
+        if self.current_key == "rotate":
+            return {"angle": self.angle_spin.value() if hasattr(self, "angle_spin") else 0}
         return {}
 
     def _build_none(self):
@@ -949,6 +969,22 @@ class FilterPanel(QWidget):
         # init labels
         self._update_color_threshold_labels()
 
+    def _build_rotate(self, p: dict = None):
+        p = p or {}
+        title = QLabel("ROTATE IMAGE")
+        title.setStyleSheet(f"color: {ACCENT}; font: bold 10pt monospace; letter-spacing: 1px;")
+        self.layout.addWidget(title)
+        self.angle_spin = QSpinBox()
+        self.angle_spin.setRange(-180, 180)
+        self.angle_spin.setSingleStep(1)
+        self.angle_spin.setValue(p.get("angle", 0))
+        self.angle_spin.setStyleSheet(self._spin_style())
+        self.angle_spin.valueChanged.connect(self._emit_params)
+        self._stacked("Angle (degrees, CCW)", self.angle_spin)
+        hint = self._hint("Rotates the frame counter-clockwise.\nUse 90° steps for portrait mounting.")
+        self.layout.addWidget(hint)
+        self.layout.addStretch()
+
     def _update_color_threshold_labels(self):
         if not hasattr(self, "color_space_combo"):
             return
@@ -1011,8 +1047,10 @@ class MainWindow(QMainWindow):
         self.cameras = list_usb_cameras()
         self.current_cam = self.cameras[0][0] if self.cameras else 0
         self.current_path = self.cameras[0][2] if self.cameras else ""
-        self.pipeline = []  # list of {"type": str, "name": str, "params": dict}
-        self.selected_idx = -1
+        # The stack always opens with a pinned "No Filter" stage at the top so
+        # the raw frame is one click away. It cannot be removed or moved.
+        self.pipeline = [{"type": "none", "name": "No Filter", "params": {}}]
+        self.selected_idx = 0
         self.streaming = False
         self.last_raw: Optional[np.ndarray] = None  # frozen raw frame for stopped-stream editing
         self.worker: Optional[CameraWorker] = None
@@ -1022,6 +1060,7 @@ class MainWindow(QMainWindow):
         self._apply_styles()
         self._populate_cameras()
         self._rebuild_filter_list()
+        self.panel.set_filter("none", {}, 0)
 
         self.cam_timer = QTimer(self)
         self.cam_timer.timeout.connect(self._refresh_cameras_if_needed)
@@ -1130,6 +1169,10 @@ class MainWindow(QMainWindow):
         self.pipeline_label.setStyleSheet(f"color: {MUTED}; font: 8pt monospace; padding: 1px 4px; background: {DARK_BG}; border: 1px solid {BORDER};")
         self.pipeline_label.setWordWrap(True)
         vcontent.addWidget(self.pipeline_label)
+        self.size_label = QLabel("—")
+        self.size_label.setStyleSheet(f"color: {MUTED}; font: 8pt monospace; padding: 1px 4px;")
+        self.size_label.setToolTip("Current image size (height × width) after the viewed stage")
+        vcontent.addWidget(self.size_label)
         self.video = VideoDisplay()
         vcontent.addWidget(self.video, 3)
 
@@ -1269,24 +1312,37 @@ class MainWindow(QMainWindow):
         if not self.pipeline:
             self.pipeline_label.setText("Pipeline: (none)")
         else:
+            # The raw base is structural, not a choice: unnumbered, always first.
+            # Real filters are numbered 1..N over non-none stages.
             parts = []
-            for i, f in enumerate(self.pipeline, 1):
-                short = f["name"].split()[0][:12]
+            n = 0
+            for i, f in enumerate(self.pipeline):
+                if f["type"] == "none":
+                    part = "Raw"
+                else:
+                    n += 1
+                    part = f"{n}:{f['name'].split()[0][:12]}"
                 # Brackets mark the viewed stage: preview shows 1..N cumulatively.
-                parts.append(f"[{i}:{short}]" if i - 1 == self.selected_idx else f"{i}:{short}")
+                parts.append(f"[{part}]" if i == self.selected_idx else part)
             self.pipeline_label.setText(" → ".join(parts))
 
     def _rebuild_filter_list(self):
         self.filter_list.blockSignals(True)
         self.filter_list.clear()
-        for i, f in enumerate(self.pipeline, 1):
-            item = QListWidgetItem(f"{i}. {f['name']}")
-            item.setData(Qt.ItemDataRole.UserRole, i-1)
+        n = 0
+        for i, f in enumerate(self.pipeline):
+            if f["type"] == "none":
+                item = QListWidgetItem("No Filter \u2014 raw base")
+            else:
+                n += 1
+                item = QListWidgetItem(f"{n}. {f['name']}")
+            item.setData(Qt.ItemDataRole.UserRole, i)
             self.filter_list.addItem(item)
         if 0 <= self.selected_idx < len(self.pipeline):
             self.filter_list.setCurrentRow(self.selected_idx)
         self.filter_list.blockSignals(False)
         self._update_pipeline_label()
+        self._update_list_buttons()
 
     def _add_filter(self):
         key = self.add_combo.currentData()
@@ -1321,6 +1377,8 @@ class MainWindow(QMainWindow):
         if key == "color_threshold":
             return {"color_space": "HSV", "lower_h": 0, "lower_s": 0, "lower_v": 0,
                     "upper_h": 180, "upper_s": 255, "upper_v": 255, "invert": False}
+        if key == "rotate":
+            return {"angle": 0}
         return {}
 
     def _on_filter_list_selection(self):
@@ -1347,37 +1405,48 @@ class MainWindow(QMainWindow):
         else:
             self.panel.set_filter("none", {}, -1)
         self._update_pipeline_label()
+        self._update_list_buttons()
         self._update_worker()
 
+    def _update_list_buttons(self):
+        # The raw base (idx 0) is structural: nothing may touch it, and no
+        # real filter may move above it (up needs idx > 1).
+        self.remove_btn.setEnabled(self.selected_idx > 0)
+        self.up_btn.setEnabled(self.selected_idx > 1)
+        self.down_btn.setEnabled(self.selected_idx > 0)
+
     def _remove_selected_filter(self):
-        if 0 <= self.selected_idx < len(self.pipeline):
-            del self.pipeline[self.selected_idx]
-            self.selected_idx = min(self.selected_idx, len(self.pipeline) - 1) if self.pipeline else -1
-            self._rebuild_filter_list()
-            if self.selected_idx >= 0:
-                f = self.pipeline[self.selected_idx]
-                self.panel.set_filter(f["type"], f["params"], self.selected_idx)
-            else:
-                self.panel.set_filter("none", {}, -1)
-            self._update_worker()
+        if self.selected_idx <= 0 or self.selected_idx >= len(self.pipeline):
+            return  # stage 1 (No Filter) is pinned at the top
+        del self.pipeline[self.selected_idx]
+        self.selected_idx = min(self.selected_idx, len(self.pipeline) - 1) if self.pipeline else -1
+        self._rebuild_filter_list()
+        if self.selected_idx >= 0:
+            f = self.pipeline[self.selected_idx]
+            self.panel.set_filter(f["type"], f["params"], self.selected_idx)
+        else:
+            self.panel.set_filter("none", {}, -1)
+        self._update_worker()
 
     def _move_filter_up(self):
-        if self.selected_idx > 0:
-            i = self.selected_idx
-            self.pipeline[i-1], self.pipeline[i] = self.pipeline[i], self.pipeline[i-1]
-            self.selected_idx -= 1
-            self._rebuild_filter_list()
-            self.panel.set_filter(self.pipeline[self.selected_idx]["type"], self.pipeline[self.selected_idx]["params"], self.selected_idx)
-            self._update_worker()
+        if self.selected_idx <= 1 or self.selected_idx >= len(self.pipeline):
+            return  # never move anything above the raw base
+        i = self.selected_idx
+        self.pipeline[i-1], self.pipeline[i] = self.pipeline[i], self.pipeline[i-1]
+        self.selected_idx -= 1
+        self._rebuild_filter_list()
+        self.panel.set_filter(self.pipeline[self.selected_idx]["type"], self.pipeline[self.selected_idx]["params"], self.selected_idx)
+        self._update_worker()
 
     def _move_filter_down(self):
-        if 0 <= self.selected_idx < len(self.pipeline) - 1:
-            i = self.selected_idx
-            self.pipeline[i+1], self.pipeline[i] = self.pipeline[i], self.pipeline[i+1]
-            self.selected_idx += 1
-            self._rebuild_filter_list()
-            self.panel.set_filter(self.pipeline[self.selected_idx]["type"], self.pipeline[self.selected_idx]["params"], self.selected_idx)
-            self._update_worker()
+        if self.selected_idx <= 0 or self.selected_idx >= len(self.pipeline) - 1:
+            return  # stage 1 (No Filter) stays pinned at the top
+        i = self.selected_idx
+        self.pipeline[i+1], self.pipeline[i] = self.pipeline[i], self.pipeline[i+1]
+        self.selected_idx += 1
+        self._rebuild_filter_list()
+        self.panel.set_filter(self.pipeline[self.selected_idx]["type"], self.pipeline[self.selected_idx]["params"], self.selected_idx)
+        self._update_worker()
 
     def _update_worker(self):
         if self.streaming and self.worker:
@@ -1400,11 +1469,19 @@ class MainWindow(QMainWindow):
         display, hist_data = apply_pipeline(self.last_raw, self.pipeline, sel, upto=upto)
         if display is None:
             return
-        self.video.set_frame(frame_to_qimage(display))
+        self._show_frame(frame_to_qimage(display))
         if hist_data and 0 <= self.selected_idx < len(self.pipeline) and self.pipeline[self.selected_idx]["type"] == "binary":
             hist, thresh = hist_data
             if hasattr(self.panel, "hist"):
                 self.panel.hist.set_data(hist, thresh)
+
+    def _show_frame(self, qimg: QImage):
+        """Display a frame and refresh the size readout (height × width)."""
+        self.video.set_frame(qimg)
+        if qimg.isNull():
+            self.size_label.setText("—")
+        else:
+            self.size_label.setText(f"{qimg.height()} × {qimg.width()}")
 
     def _toggle_stream(self):
         if self.streaming:
@@ -1468,12 +1545,12 @@ class MainWindow(QMainWindow):
             self._render_still()
             self.status_lbl.setText("Stopped — still frame (filters editable)")
         else:
-            self.video.set_frame(QImage())
+            self._show_frame(QImage())
             self.status_lbl.setText("Stopped")
 
     @pyqtSlot(QImage, object)
     def _on_frame(self, qimg: QImage, hist_data):
-        self.video.set_frame(qimg)
+        self._show_frame(qimg)
         if hist_data and 0 <= self.selected_idx < len(self.pipeline) and self.pipeline[self.selected_idx]["type"] == "binary":
             hist, thresh = hist_data
             if hasattr(self.panel, "hist"):
